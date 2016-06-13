@@ -644,6 +644,7 @@ typedef struct _options_t {
   bool wintype_shadow[NUM_WINTYPES];
   /// Red, green and blue tone of the shadow.
   double shadow_red, shadow_green, shadow_blue;
+  double shadow_red_focus, shadow_green_focus, shadow_blue_focus;
   int shadow_radius;
   int shadow_offset_x, shadow_offset_y;
   double shadow_opacity;
@@ -921,6 +922,7 @@ typedef struct _session_t {
   Picture black_picture;
   /// 1x1 Picture of the shadow color.
   Picture cshadow_picture;
+  Picture cshadow_picture_focus;
   /// 1x1 white Picture.
   Picture white_picture;
   /// Gaussian map of shadow.

@@ -488,9 +488,16 @@ win_build_shadow(session_t *ps, win *w, double opacity) {
 
   XPutImage(ps->dpy, shadow_pixmap, gc, shadow_image, 0, 0, 0, 0,
     shadow_image->width, shadow_image->height);
-  XRenderComposite(ps->dpy, PictOpSrc, ps->cshadow_picture, shadow_picture,
-      shadow_picture_argb, 0, 0, 0, 0, 0, 0,
-      shadow_image->width, shadow_image->height);
+  if (w->focused) {
+    XRenderComposite(ps->dpy, PictOpSrc, ps->cshadow_picture_focus, shadow_picture,
+        shadow_picture_argb, 0, 0, 0, 0, 0, 0,
+        shadow_image->width, shadow_image->height);
+  }
+  else {
+    XRenderComposite(ps->dpy, PictOpSrc, ps->cshadow_picture, shadow_picture,
+        shadow_picture_argb, 0, 0, 0, 0, 0, 0,
+        shadow_image->width, shadow_image->height);
+  }
 
   assert(!w->shadow_paint.pixmap);
   w->shadow_paint.pixmap = shadow_pixmap_argb;
@@ -1116,7 +1123,7 @@ paint_preprocess(session_t *ps, win *list) {
     // Data expiration
     {
       // Remove built shadow if needed
-      if (w->flags & WFLAG_SIZE_CHANGE)
+      if (w->flags & (WFLAG_SIZE_CHANGE | WFLAG_OPCT_CHANGE))
         free_paint(ps, &w->shadow_paint);
 
       // Destroy reg_ignore on all windows if they should expire
@@ -5550,6 +5557,12 @@ parse_config(session_t *ps, struct options_tmp *pcfgtmp) {
   config_lookup_float(&cfg, "shadow-green", &ps->o.shadow_green);
   // --shadow-blue
   config_lookup_float(&cfg, "shadow-blue", &ps->o.shadow_blue);
+  // --shadow-red-focus
+  config_lookup_float(&cfg, "shadow-red-focus", &ps->o.shadow_red_focus);
+  // --shadow-green-focus
+  config_lookup_float(&cfg, "shadow-green-focus", &ps->o.shadow_green_focus);
+  // --shadow-blue-focus
+  config_lookup_float(&cfg, "shadow-blue-focus", &ps->o.shadow_blue_focus);
   // --shadow-exclude-reg
   if (config_lookup_string(&cfg, "shadow-exclude-reg", &sval)
       && !parse_geometry(ps, sval, &ps->o.shadow_exclude_reg_geom))
@@ -6058,6 +6071,9 @@ get_cfg(session_t *ps, int argc, char *const *argv, bool first_pass) {
   ps->o.shadow_red = normalize_d(ps->o.shadow_red);
   ps->o.shadow_green = normalize_d(ps->o.shadow_green);
   ps->o.shadow_blue = normalize_d(ps->o.shadow_blue);
+  ps->o.shadow_red_focus = normalize_d(ps->o.shadow_red_focus);
+  ps->o.shadow_green_focus = normalize_d(ps->o.shadow_green_focus);
+  ps->o.shadow_blue_focus = normalize_d(ps->o.shadow_blue_focus);
   ps->o.inactive_dim = normalize_d(ps->o.inactive_dim);
   ps->o.frame_opacity = normalize_d(ps->o.frame_opacity);
   ps->o.shadow_opacity = normalize_d(ps->o.shadow_opacity);
@@ -6094,7 +6110,7 @@ get_cfg(session_t *ps, int argc, char *const *argv, bool first_pass) {
   // Other variables determined by options
 
   // Determine whether we need to track focus changes
-  if (ps->o.inactive_opacity || ps->o.active_opacity || ps->o.inactive_dim) {
+  if (true || ps->o.inactive_opacity || ps->o.active_opacity || ps->o.inactive_dim) {
     ps->o.track_focus = true;
   }
 
@@ -7013,6 +7029,9 @@ session_init(session_t *ps_old, int argc, char **argv) {
       .shadow_red = 0.0,
       .shadow_green = 0.0,
       .shadow_blue = 0.0,
+      .shadow_red_focus = 0.0,
+      .shadow_green_focus = 0.0,
+      .shadow_blue_focus = 0.0,
       .shadow_radius = 12,
       .shadow_offset_x = -15,
       .shadow_offset_y = -15,
@@ -7088,6 +7107,7 @@ session_init(session_t *ps_old, int argc, char **argv) {
 
     .black_picture = None,
     .cshadow_picture = None,
+    .cshadow_picture_focus = None,
     .white_picture = None,
     .gaussian_map = NULL,
     .cgsize = 0,
@@ -7411,6 +7431,13 @@ session_init(session_t *ps_old, int argc, char **argv) {
         ps->o.shadow_red, ps->o.shadow_green, ps->o.shadow_blue);
   }
 
+  if (!ps->o.shadow_red_focus && !ps->o.shadow_green_focus && !ps->o.shadow_blue_focus) {
+    ps->cshadow_picture_focus = ps->black_picture;
+  } else {
+    ps->cshadow_picture_focus = solid_picture(ps, true, 1,
+        ps->o.shadow_red_focus, ps->o.shadow_green_focus, ps->o.shadow_blue_focus);
+  }
+
   fds_insert(ps, ConnectionNumber(ps->dpy), POLLIN);
   ps->tmout_unredir = timeout_insert(ps, ps->o.unredir_if_possible_delay,
       tmout_unredir_callback, NULL);
@@ -7566,6 +7593,11 @@ session_destroy(session_t *ps) {
     ps->cshadow_picture = None;
   else
     free_picture(ps, &ps->cshadow_picture);
+
+  if (ps->cshadow_picture_focus == ps->black_picture)
+    ps->cshadow_picture_focus = None;
+  else
+    free_picture(ps, &ps->cshadow_picture_focus);
 
   free_picture(ps, &ps->black_picture);
   free_picture(ps, &ps->white_picture);
